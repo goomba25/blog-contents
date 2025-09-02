@@ -1,0 +1,97 @@
+---
+title: "OPTEE Image for RPI 3"
+excerpt: "OPTEE Image for RPI 3"
+date: "2025-06-08"
+categories: [optee]
+---
+
+Raspberry Pi 3를 위한 OPTEE 이미지를 빌드하는 과정을 작성했습니다.
+
+* 저는 개인적으로 Docker를 사용하는 것을 선호합니다.
+
+## Install Packages
+
+OPTEE 이미지를 빌드하기 위한 패키지를 설치해야 합니다.   
+OPTEE 사이트에서 필요한 패키지를 참조하여 설치합니다.
+
+[OPTEE Document - Prerequisites](https://optee.readthedocs.io/en/latest/building/prerequisites.html)
+
+## Download Source Code
+
+OPTEE Manifest를 사용하여 필요한 파일들을 다운로드 합니다.
+
+* 이 시점에서 최신은 `4.6.0`이지만 최신 버전이 있을 수 있습니다.
+
+```bash
+$ mkdir -p rpi3-optee
+$ cd rpi3-optee
+$ repo init -u https://github.com/OP-TEE/manifest.git -m rpi3.xml -b 4.6.0
+$ repo sync -j$(nproc) --no-clone-bundle
+```
+
+## Build Toolchains
+
+Toolchain을 빌드합니다.
+
+```bash
+$ cd rpi3-optee/build
+$ make -j$(nproc) toolchains
+```
+
+## Build Image
+
+이미지를 빌드하기 전에 설정해 줄 것들이 몇 가지 존재합니다.
+
+### UART disable 설정
+
+RPI3는 BT가 Enable 상태이면 UART 로그가 나오지 얂는다고 합니다.   
+따라서 `build/rpi3/firmware/config.txt` 파일에 아래의 내용을 추가합니다.
+
+```txt
+dtoverlay=pi3-disable-bt
+```
+
+### check-bin-arch 수정
+
+Binary architecture check 과정 중 `bootcode.bin`, `start.elf` 등   
+Broadcom release binary에 대해 64bit 용도가 아니라는 에러가 발생할 수 있습니다.
+
+부팅 시 32bit 용도로 부팅하고 Trusted firmware와 Uboot가 올라가면서   
+64bit 용도로 변경해주기 때문에 해당 과정은 불필요하다고 합니다.
+
+`buildroot/support/scripts/check-bin-arch`의 `exitcode=1` 문구를 주석으로 수정합니다.
+
+```bash
+# Architecture is correct
+    if test "${arch}" = "${arch_name}" ; then
+        continue
+    fi  
+
+    printf 'ERROR: architecture for "%s" is "%s", should be "%s"\n' \
+           "${f}" "${arch}" "${arch_name}"
+    continue
+#exitcode=1  <= 여기
+done < <( sed -r -e "/^${package},\.(.+)$/!d; s//\1/;" ${pkg_list} )
+```
+
+### Run make
+
+위의 설정을 완료한 후에 빌드합니다.
+
+```bash
+$ cd rpi3-optee/build
+$ make -j4
+```
+
+## Flash the device
+
+생성된 RPI3용 OPTEE 이미지를 플래시합니다.
+
+SD 카드에 플래시하는 방법은 `make img-help` 명령으로 알 수 있습니다.
+
+```bash
+$ make img-help
+
+Use 'dmesg' to find your device/SD-card name, then run the following as root:
+   $ sudo dd if=/home/hsseo/Drive_D/rpi3-optee/build/../out/rpi3-sdcard.img of=/dev/<name-of-my-sd-card> bs=1024k conv=fsync status=progress
+```

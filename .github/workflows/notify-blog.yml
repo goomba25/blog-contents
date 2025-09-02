@@ -1,0 +1,16 @@
+name: Notify Blog
+on:
+  push:
+    branches: [ main ]   # blog-contents의 기본 브랜치
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger repository_dispatch to blog repo
+        run: |
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.GH_PAT }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/goomba25/goomba25.github.io/dispatches \
+            -d '{"event_type":"content-updated"}'
