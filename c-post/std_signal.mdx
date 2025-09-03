@@ -1,0 +1,82 @@
+---
+title: "[C++] std::signal 사용"
+excerpt: "C++ signal"
+date: "2025-09-03"
+categories: [cpp]
+---
+
+`signal`은 프로세스에 발생하는 신호, 말그대로 "시그널"을 처리하기 위한 C 표준 라이브러리입니다.   
+C에서는 signal 형태로 사용하지만 C++에서는 std::signal 형태로 사용합니다.
+
+예를 들어 프로그램이 실행 되는 도중에 `CTRL + C`와 같은 신호를 받아 프로그램을 종료하는 식으로 사용할 수 있습니다.
+
+## 헤더
+
+```cpp
+#include <signal.h> // C 스타일
+
+#include <csignal>  // C++ 스타일
+```
+
+## 함수 원형
+
+* `int sig` : 시그널 번호
+* `void (*func)(int)` : 시그널이 발생했을 때 호출할 함수 포인터 (핸들러)
+    * 핸들러는 **void handler(int)** 형태입니다.
+
+```cpp
+void (*signal(int sig, void (*func)(int)))(int);
+```
+
+## 시그널
+
+운영체제에서 프로세스에게 특정 이벤트가 발생했다는 것을 알리기 위한 신호(인터럽트)입니다.   
+아래에는 자주 볼 수 있는 시그널입니다. (이외에 더 있다고 합니다.)
+
+
+|Signal|Description|
+|:--|:--|
+|SIGINT|`CTRL + C` (프로세스 인터럽트)|
+|SIGTERM|정상적인 종료 요청|
+|SIGKILL|강제 종료|
+|SIGSEGV|Segmentation fault|
+|SIGALRM|타이머 알람|
+
+## 예제
+
+예시로 아래와 같이 코드를 작성했습니다.
+
+* 1초마다 카운트를 출력하고 100개의 카운트를 출력하고 나서 종료되는 코드입니다.
+* 중간에 `CTRL + C`를 누르면 프로그램이 종료되면서 `on_signal`이 호출됩니다.
+
+```cpp
+#include <iostream>
+#include <csignal>
+
+namespace
+{
+    int count = 0;
+
+    void on_signal(int signal)
+    {
+        std::cout << "Signal: " << signal << std::endl;
+        _exit(0);
+    }
+}
+
+int main(void)
+{
+    std::cout << "Hello World" << std::endl;
+
+    std::signal(SIGINT, on_signal);
+
+    while (count < 100)
+    {
+        std::cout << "=> " << count << std::endl;
+        count++;
+
+        usleep(1000 * 1000);
+    }
+    return 0;
+}
+```
