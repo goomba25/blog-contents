@@ -1,0 +1,139 @@
+---
+title: "[GTest] 일반적인 TEST 방법"
+excerpt: "Use generic gtest test case"
+date: "2025-09-11"
+categories: [etc]
+---
+
+개발을 진행하면서 테스트는 반드시 필요한 작업 중 하나라고 생각합니다. (TDD든 뭐든.)   
+업무 상 가장 많이 사용하고 앞으로도 사용할 것 같은 Google Test를 정리하고자 합니다.
+
+Google Test(이하 gtest)에서는 일반적으로 세 가지 방법의 테스트 케이스 작성 방식을 제공합니다.
+
+* TEST
+* TEST_F
+* TEST_P
+
+이 세 가지 방식에 대해 정리했습니다.
+
+## TEST
+
+```cpp
+TEST(TestSuiteName, TestName)
+```
+
+가장 기본적인 테스트 방식입니다.   
+독립적으로 동작하는 테스트를 작성할 수 있습니다.
+
+공통 모듈에 대한 테스트 보다는 독립적으로 하나의 함수 또는 단순 입출력과 같은 테스트에 적합합니다.
+
+### Example
+
+```cpp
+TEST(MathTest, Plus) {
+    EXPECT_EQ(1 + 1, 2);
+}
+
+TEST(MathTest, Equal) {
+    ASSERT_TRUE(1 == 1);
+}
+```
+
+## TEST_F
+
+```cpp
+TEST_F(TestFixtureName, TestName)
+```
+
+TEST_F는 TEST처럼 단일 테스트도 가능하지만   
+공통 환경(Fixture)을 사용해야 하는 테스트에 사용할 수 있습니다.
+
+`::testing::Test`를 상속한 클래스를 사용해야 하며,   
+`SetUp`/`TearDown`과 같은 함수를 사용하여 동일한 환경 설정 및 리소스 사용이 가능합니다.
+
+### Example
+
+```cpp
+class TestFixture : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        std::cout << "테스트 시작 전" << std::endl;
+    }
+
+    void TearDown() override
+    {
+        std::cout << "테스트 종료 후" << std::endl;
+    }
+
+    int sum(int a, int b)
+    {
+        return a + b;
+    }
+};
+
+TEST_F(TestFixture, TestCaseName)
+{
+    int num = 0;
+
+    num = sum(2, 3);
+    EXPECT_EQ(num, 5);
+}
+```
+
+## TEST_P
+
+```cpp
+TEST_P(TestFixtureName, TestName)
+```
+
+TEST_P도 TEST처럼 단일 테스트도 가능합니다.   
+하지만 같은 기능을 여러 입력 값으로 테스트 하려는 경우에 사용할 수 있습니다.
+
+`::testing::TestWithParam<T>`를 상속한 클래스를 사용해야 하며,
+테스트를 만들어도 `INSTANTIATE_TEST_SUITE_P`를 통해 파라미터를 주지 않으면 동작하지 않습니다.   
+또한 내부적으로 `GetParam` 함수를 통해 파라미터를 받아 테스트를 수행합니다.
+
+### Example
+
+```cpp
+struct TestParam
+{
+    int num1;
+    int num2;
+    int result;
+    std::string str;
+};
+
+class TestFixture : public ::testing::TestWithParam<TestParam>
+{
+protected:
+    void SetUp() override
+    {
+        std::cout << "테스트 시작 전" << std::endl;
+    }
+
+    void TearDown() override
+    {
+        std::cout << "테스트 종료 후" << std::endl;
+    }
+};
+
+TEST_P(TestFixture, TestCaseName)
+{
+    TestParam param = GetParam();
+
+    std::cout << param.str << std::endl;
+
+    EXPECT_EQ(param.num1 + param.num2, param.result);
+}
+
+std::vector<TestParam> TestGroup = {
+    {1, 1, 2, "Test 1"},
+    {1, 2, 3, "Test 2"},
+    {4, 5, 9, "Test 3"},
+};
+
+INSTANTIATE_TEST_SUITE_P(TestPrefix, TestFixture, ::testing::ValuesIn(TestGroup));
+```
