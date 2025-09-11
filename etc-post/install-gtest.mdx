@@ -1,0 +1,89 @@
+---
+title: "[GTest] Google Test 설치하기"
+excerpt: "Install google test in Ubuntu"
+date: "2025-09-11"
+categories: [etc]
+---
+
+Google Test(이하 gtest)는 Google에서 개발한 C++ 테스트 프레임워크입니다.   
+오픈 소스(Github)로 제공되며 꽤나 보편적으로 사용되는 것 같습니다.
+
+모든 테스트를 gtest를 사용해서 작성하게 되면   
+동일한 형식의 결과를 출력할 수 있다는 것도 큰 장점 중 하나라고 생각합니다.
+
+* 제가 테스트 한 환경은 Ubuntu OS입니다.
+
+### Install
+
+우선 gtest를 설치합니다.   
+gtest에서 공식적으로 지원하는 빌드 툴은 `cmake`와 `bazel`인데, 저는 `cmake`를 사용하기 때문에 같이 설치했습니다.
+
+```bash
+sudo apt install cmake libgtest-dev
+cd /usr/src/gtest
+mkdir build
+cd build
+sudo cmake ..
+sudo make
+sudo make install
+```
+
+### Cmake
+
+테스트 코드를 빌드하기 위해 `CMakeLists.txt`파일을 아래와 같이 작성할 수 있습니다.
+
+```cmake
+cmake_minimum_required(VERSION 3.14)
+project(test)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+include(FetchContent)
+FetchContent_Declare(
+  googletest
+  GIT_REPOSITORY https://github.com/google/googletest
+  GIT_TAG v1.17.0
+)
+FetchContent_MakeAvailable(googletest)
+
+add_executable(${PROJECT_NAME} 
+  main.cpp
+)
+
+target_link_libraries(${PROJECT_NAME} PRIVATE
+  GTest::gtest
+  GTest::gtest_main
+)
+```
+
+* FetchContent를 사용해서 모듈을 불러오고 URL과 버전을 작성합니다. (현재 날짜 기준 1.17.0이 최신 버전)
+
+### gtest & gtest_main
+
+* GTest::gtest
+* GTest::gtest_main
+
+라이브러리를 링크 할 때 두 라이브러리를 중복해서 사용하는 경우가 있는데,   
+사실 둘 중 하나만 링크하면 된다고 합니다.
+
+gtest는 libgtest.a를 사용하도록 하고,   
+gtest_main은 libgtest_main.a를 사용한다고 합니다.
+
+gtest는 gtest에 관련된 라이브러리이고, gtest_main은 추가적으로 main 함수가 작성되어 있어서   
+따로 main 함수를 작성할 필요가 없다고 합니다.   
+(즉, gtest_main이 gtest를 포함)
+
+만약 main을 따로 작성할 경우 아래와 같이 작성이 가능합니다.
+
+```cpp
+#include <gtest/gtest.h>
+
+int main(int argc, char **argv)
+{
+    ::testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
+}
+```
+
+* `RUN_ALL_TESTS`를 통해 따로 실행할 테스트를 지정하지 않아도 작성된 모든 테스트가 실행됩니다.
