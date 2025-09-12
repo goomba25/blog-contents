@@ -137,3 +137,68 @@ std::vector<TestParam> TestGroup = {
 
 INSTANTIATE_TEST_SUITE_P(TestPrefix, TestFixture, ::testing::ValuesIn(TestGroup));
 ```
+
+## INSTANTIATE_TEST_SUITE_P
+
+```cpp
+INSTANTIATE_TEST_SUITE_P(InstantiationName, TestSuiteName, param_generator);
+INSTANTIATE_TEST_SUITE_P(InstantiationName, TestSuiteName, param_generator, name_generator);
+```
+
+`INSTANTIATE_TEST_SUITE_P`는 이름에서 유추할 수 있듯 TEST_P로 만들어진 테스트를 인스턴스화하는 매크로입니다.
+
+* InstantiationName : Prefix이며 빈 문자도 가능합니다.
+* TestSuiteName : TEST_P에서 정의된 테스트 스위트(클래스)입니다.
+* param_generator : 파라미터를 생성하는 부분입니다.
+* name_generator : 옵션 값이며, 테스트의 이름을 만드는 suffix입니다.
+
+만들어진 테스트 케이스는 "InstantiationName/TestSuiteName/TestName/Index" 형태로 만들어집니다.   
+여기서 Index는 name_generator를 사용할 경우 해당 이름으로 지정됩니다.
+
+### param_generator
+
+파라미터를 생성하는 부분은 아래와 같이 나뉜다고 한다. (다 써보지는 않음)
+
+|Generator|Description|
+|:--|:--|
+|Range(begin, end [, step])|begin, end 구간 값|
+|Values(v1, .., vN)|지정된 값들|
+|ValuesIn(container) / ValuesIn(begin, end)|컨테이너 값 또는 범위 값|
+|Bool()|false, true 값|
+|Combine(g1, .., gN)|지정된 값들의 모든 조합을 `std::tuple`형태로 제공|
+|ConvertGenerator\<T>(g)|중간 변환 어댑터 개념|
+
+* 여기서 ConvertGenerator는 아직 사용해보지 않았습니다.
+
+### name_generator
+
+말 그대로 이름을 생성하는 부분입니다.   
+생략하게 되면 기본적으로 Index가 붙습니다. (0, 1, 2, ...)
+
+`std::string(const testing::TestParamInfo<ParamType>&)`의 형태를 사용해야 합니다.   
+테스트 코드에서 GetParam으로 얻는 값은 `info.param`으로 접근이 가능합니다.
+
+```cpp
+// 람다를 사용한 방식
+INSTANTIATE_TEST_SUITE_P(
+    MyInstantiation, MyTestSuite,
+    testing::Values(...),
+    [](const testing::TestParamInfo<MyTestSuite::ParamType>& info) {
+      // Can use info.param here to generate the test suffix
+      std::string name = ...
+      return name;
+    });
+```
+
+* 중요한 것은 공백이나 금지 문자를 포함해서는 안된다는 점입니다.
+* `std::string`이나 C문자열은 사용하지 않습니다. (금지 문자 포함)
+
+아래와 같이 사용할 수도 있습니다.
+
+```cpp
+std::string PrintTestName(const testing::TestParamInfo<TestParam>& info) {
+    return info.param.str + std::to_string(info.param.result);
+}
+```
+
+| 참고 [Testing Reference](https://google.github.io/googletest/reference/testing.html)
