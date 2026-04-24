@@ -1,0 +1,175 @@
+---
+title: "[통신] UDS 소켓 통신 (TCP/IP와의 차이)"
+excerpt: "Socket communication - UDS"
+date: "2026-04-24"
+categories: [etc]
+---
+
+UDS(Unix Domain Socket)은 동일한 시스템 내에서 프로세스 간 통신하기 위한 IPC(Inter-Process Communication)입니다.
+
+네트워크를 통하지 않기 때문에 TCP/IP 소켓 통신보다 빠르고 안전합니다.
+
+## TCP/IP와 비교
+
+| 구분      | UDS            | TCP/IP          |
+| :-------- | :------------- | :-------------- |
+| 도메인    | AF_UNIX        | AF_INET         |
+| 구조체    | sockaddr_un    | sockaddr_in     |
+| 통신 범위 | Local          | Local / Remote  |
+| 통신 속도 | 빠름           | 상대적으로 느림 |
+| 주소      | 파일 경로      | IP 주소         |
+| 보안      | 파일 권한 제어 | 방화벽, TLS 등  |
+| 네트워크  | X              | 사용            |
+
+### 통신 방식 차이
+
+TCP/IP 통신은 네트워크 스택을 반드시 거쳐야 합니다.  
+그에 반해 UDS 통신은 네트워크 스택까지 가지 않고 커널 메모리에서 복사하여 데이터를 전송합니다.  
+그러한 이유로 TCP/IP 보다 UDS 통신의 속도가 더 빠릅니다.
+
+계층 구조 및 성격은 조금 다르지만 API 레벨적인 측면으로 보면 사용 방식은 동일합니다.
+
+## 동작 방식
+
+UDS는 커널을 통해 직접 데이터를 전달하는 방식입니다.
+
+1. 클라이언트에서 소켓으로 데이터를 보낸다.
+2. 소켓의 데이터가 커널로 복사된다.
+3. 커널에서 연결된 소켓의 큐(queue)에 데이터를 넣는다.
+4. 서버에서 소켓의 데이터를 읽는다.
+
+주의할 점은 UDS 소켓 파일은 재사용성이 없는 데이터로,  
+서버가 종료되는 시점에 다시 쓸 수 없기 때문에 Bind에서 새로 만들어야 합니다.
+
+따라서 종료되는 시점에 삭제하거나, 예기치 못한 종료에 대비하여 시작 시 삭제하는 등의 처리를 해야 합니다.
+
+## 예제
+
+간단하게 C로 작성된 UDS 소켓 통신 예제입니다.
+
+### 클라이언트
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <string.h>
+
+#define SOCKET_PATH "/tmp/uds_socket"
+#define BUFFER_SIZE 1024
+
+int main()
+{
+    int socket_fd;
+    struct sockaddr_un addr;
+    char buffer[BUFFER_SIZE];
+
+    socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (socket_fd < 0)
+    {
+        perror("socket");
+        exit(1);
+    }
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    strcpy(addr.sun_path, SOCKET_PATH);
+
+    if (connect(socket_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+    {
+        perror("connect");
+        close(socket_fd);
+        exit(1);
+    }
+    printf("[Client] Connected to server.\n");
+
+    const char *msg = "Hello from Client!";
+    send(socket_fd, msg, strlen(msg), 0);
+    printf("[Client] Sent: %s\n", msg);
+
+    memset(buffer, 0, BUFFER_SIZE);
+    recv(socket_fd, buffer, BUFFER_SIZE, 0);
+    printf("[Client] Received: %s\n", buffer);
+
+    close(socket_fd);
+    printf("[Client] Connection closed.\n");
+
+    return 0;
+}
+```
+
+### 서버
+
+```c
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <sys/un.h>
+#include <sys/socket.h>
+
+#define SOCKET_PATH "/tmp/uds_socket"
+#define BUFFER_SIZE 1024
+
+int main()
+{
+    int listen_fd, connection_fd;
+    struct sockaddr_un server_addr, client_addr;
+    socklen_t client_len = sizeof(client_addr);
+    char buffer[BUFFER_SIZE];
+
+    unlink(SOCKET_PATH);
+
+    listen_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (listen_fd < 0)
+    {
+        perror("socket");
+        exit(1);
+    }
+
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sun_family = AF_UNIX;
+    strcpy(server_addr.sun_path, SOCKET_PATH);
+
+    if (bind(listen_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
+    {
+        perror("bind");
+        close(listen_fd);
+        exit(1);
+    }
+
+    if (listen(listen_fd, 5) < 0)
+    {
+        perror("listen");
+        close(listen_fd);
+        exit(1);
+    }
+
+    printf("[Server] Listening on file...\n");
+
+    connection_fd = accept(listen_fd, (struct sockaddr *)&client_addr, &client_len);
+    if (connection_fd < 0)
+    {
+        perror("accept");
+        close(listen_fd);
+        exit(1);
+    }
+
+    printf("[Server] Client connected! FD=%d\n", connection_fd);
+
+    memset(buffer, 0, BUFFER_SIZE);
+    recv(connection_fd, buffer, BUFFER_SIZE, 0);
+    printf("[Server] Received: %s\n", buffer);
+
+    const char *msg = "Hello from Server!";
+    send(connection_fd, msg, strlen(msg), 0);
+    printf("[Server] Sent: %s\n", msg);
+
+    close(connection_fd);
+    close(listen_fd);
+    printf("[Server] Connection closed.\n");
+
+    return 0;
+}
+```
