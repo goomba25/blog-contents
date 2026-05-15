@@ -1,0 +1,136 @@
+---
+title: "[Thread] 스레드 개념"
+excerpt: "Thread concept"
+date: "2026-05-15"
+categories: [system]
+---
+
+# Thread (스레드)
+
+여기저기 찾아볼 수 있는 스레드에 대한 정리된 설명은   
+"스레드는 프로세스 내부에서 실행되는 작은 작업 단위"입니다.
+
+쉽게 하나의 실행 중인 프로그램을 하나의 프로세스라고 한다면,   
+스레드는 그 안에서 실제로 작업을 수행하는 실행 단위가 됩니다.
+
+예를 들어 우리가 브라우저(`프로세스`)를 사용한다면,   
+렌더링, 네트워크 통신, UI 처리 등의 작업을 스레드가 처리해주는 거라고 볼 수 있습니다.
+
+## 스레드 특징
+
+### 프로세스와 스레드 차이
+
+프로세스와 스레드의 대표적인 차이로는 프로세스는 다른 프로세스의 데이터에 접근하는 것이 직접적으로는 불가능하지만,   
+같은 프로세스 내의 스레드들은 서로의 데이터에 접근하는 것이 가능하다는 점이 있습니다.
+
+프로세스는 다른 프로세스의 데이터에 접근하려면 IPC를 통해 가져올 수 있겠지만,   
+스레드는 그럴 필요가 없이 바로 가져다가 쓰면 됩니다.
+
+프로세스는 운영체제에서 흔히 아는 [ Code/Data/Stack/Heap ] 형태로 메모리 영역을 할당해주고,    
+스레드는 Stack 영역을 제외한 다른 영역을 공유하여 사용할 수 있습니다.
+
+* 스레드는 개별적으로 Stack을 가지고 있습니다. (공유 X)
+
+### 병렬 작업
+
+스레드는 작업을 병렬로 처리할 수 있습니다. (물론 프로세스도 가능하지만)   
+또한 같은 자원을 공유하여 사용할 수 있기 때문에 작업 효율성이 좋고, 동시 수행이 가능합니다.
+
+하지만 자원 공유 및 동시 수행은 말이 좋아보이지 관리하지 않으면 독이 됩니다.
+
+프로세스는 IPC를 통해 데이터를 가져오는데에 반해, 스레드는 직접 데이터를 사용하기 때문에 서로 영향을 줄 수 밖에 없습니다.   
+만약 공유 자원에 이미 스레드가 접근해서 데이터를 변경하고 있는데 다른 스레드에서 접근하려고 한다면 문제가 될 수 있습니다.   
+이러한 상황을 방지하기 위해 `mutex`, `semaphore` 등을 통해 동기화 문제를 관리합니다.
+
+또한 스레드 하나에서 오류가 발생했다? 그러면 같은 프로세스 내의 스레드가 모두 강제 종료될 수 있습니다.
+
+### 함수 콜백
+
+스레드는 하나의 작업 단위입니다.   
+따라서 스레드가 어떠한 작업을 해야 하는지 알아야 하므로, 스레드 생성 시 함수 포인터를 전달합니다.
+
+예를 들어 `pthread_create` 함수를 보면
+
+```c
+int pthread_create(pthread_t *thread,
+                   const pthread_attr_t *attr,
+                   void *(*start_routine)(void*),
+                   void *arg);
+```
+
+이렇게 `void *(*start_routine)(void*)` 형식으로 어떤 작업을 수행할 지 미리 알려줍니다.
+
+개념적으로 아래와 같이 동작할 수 있습니다.
+
+1. 스레드 생성
+2. CPU 스케쥴러 등록
+3. 스레드 Stack 생성
+4. worker 스레드 실행 (등록된 함수 실행)
+
+## Thread 예제
+
+### pthread 사용
+
+C/C++에서 스레드를 사용하는 방법 중 Linux 계열에서는 POSIX의 pthread 라이브러리를 사용합니다.
+
+```c
+#include <stdio.h>
+#include <pthread.h>
+#include <unistd.h>
+
+void *function(void *arg) {
+    int* parameter = (int*)arg;
+    sleep(1);
+    printf("Test : %d", *parameter);
+}
+
+int main() {
+    pthread_t t1, t2;
+
+    pthread_create(&t1, NULL, function, &10);
+    pthread_create(&t2, NULL, function, &20);
+
+    pthread_join(t1, NULL);
+    pthread_join(t2, NULL);
+
+    return 0;
+}
+```
+
+이렇게 함수를 작성하면 순서에 상관없이 10과 20의 값이 출력될 겁니다.
+
+### std::thread 사용
+
+C++11 부터는 표준 라이브러리에서 스레드를 제공하기 떄문에 std::thread를 사용할 수 있습니다.   
+(당연히 pthread도 사용할 수 있습니다.)
+
+```cpp
+#include <thread>
+#include <iostream>
+#include <chrono>
+
+void function(int arg) {
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::cout << "Test : " << arg << std::endl;
+}
+
+int main() {
+    std::thread t1(function, 10);
+    std::thread t2(function, 20);
+
+    t1.join();
+    t2.join();
+
+    return 0;
+}
+```
+
+C++에서는 람다(Lamda)를 사용할 수 있다.
+
+```cpp
+std::thread t1([arg]() {
+    std::cout << "Test : " << arg << std::endl;
+});
+
+t1.join();
+```
